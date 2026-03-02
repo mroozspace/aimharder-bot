@@ -1,18 +1,51 @@
+import { login } from "./auth";
+
 const CONFIG = {
   email: process.env.email!,
   password: process.env.password!,
   boxSubdomain: process.env.boxSubdomain!,
-  classId: process.env.classId!,
-  day: process.env.day!,
+  boxId: process.env.boxId!,
+  day: process.env.day!, // YYYYMMDD
+  time: process.env.time!, // e.g. "20:00" or "20.00"
+  className: process.env.className!,
 };
 
-import { login } from "./auth";
+function parseTime(time: string): string {
+  const [h, m] = time.split(/[:.]/);
+  return h.padStart(2, "0") + (m ?? "00");
+}
 
-// --- book ---
-async function bookClass(cookieHeader: string): Promise<void> {
+async function findClassId(
+  cookieHeader: string,
+  day: string,
+  time: string,
+): Promise<string> {
+  const url = `https://${CONFIG.boxSubdomain}.aimharder.com/api/bookings?day=${day}&familyId=&box=${CONFIG.boxId}&_=${Date.now()}`;
+  const res = await fetch(url, { headers: { Cookie: cookieHeader } });
+  const data = await res.json();
+
+  const bookings: any[] = data.bookings ?? [];
+  const match = bookings.find(
+    (b) =>
+      b.timeid?.startsWith(time) &&
+      b.className.toLowerCase().includes(CONFIG.className.toLowerCase()),
+  );
+  if (!match) {
+    throw new Error(
+      `No class found at ${time} on ${day} at ${CONFIG.className}`,
+    );
+  }
+  return String(match.id);
+}
+
+async function bookClass(
+  cookieHeader: string,
+  classId: string,
+  day: string,
+): Promise<void> {
   const body = new URLSearchParams({
-    id: CONFIG.classId,
-    day: CONFIG.day,
+    id: classId,
+    day,
     insist: "0",
     familyId: "",
   });
@@ -30,17 +63,20 @@ async function bookClass(cookieHeader: string): Promise<void> {
   );
 
   const data = await res.json();
-  console.log("Booking response:", data);
+  console.log("Booking response succeed:", Boolean(data?.bookState));
 }
 
-// --- main ---
 async function main() {
+  const time = parseTime(CONFIG.time);
+
   console.log("Logging in...");
   const cookies = await login(CONFIG.email, CONFIG.password);
-  console.log("Logged in, cookies:", cookies);
 
-  console.log(`Booking class ${CONFIG.classId} on ${CONFIG.day}...`);
-  await bookClass(cookies);
+  console.log(`Finding class at ${time} on ${CONFIG.day}...`);
+  const classId = await findClassId(cookies, CONFIG.day, time);
+  console.log(`Found class ${classId}, booking...`);
+
+  await bookClass(cookies, classId, CONFIG.day);
 }
 
 main().catch((err) => {
