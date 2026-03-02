@@ -6,31 +6,7 @@ const CONFIG = {
   day: process.env.day!,
 };
 
-// --- login ---
-async function login(): Promise<string> {
-  const body = new URLSearchParams({
-    mail: CONFIG.email,
-    pw: CONFIG.password,
-    login: "Iniciar sesión",
-    loginiframe: "0",
-  });
-
-  const res = await fetch("https://login.aimharder.com/", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-    redirect: "manual",
-  });
-
-  const cookies = res.headers.getSetCookie();
-  if (cookies.length === 0) {
-    throw new Error(
-      `Login failed — no cookies received (status ${res.status})`,
-    );
-  }
-
-  return cookies.map((c) => c.split(";")[0]).join("; ");
-}
+import { login } from "./auth";
 
 // --- book ---
 async function bookClass(cookieHeader: string): Promise<void> {
@@ -60,7 +36,7 @@ async function bookClass(cookieHeader: string): Promise<void> {
 // --- main ---
 async function main() {
   console.log("Logging in...");
-  const cookies = await login();
+  const cookies = await login(CONFIG.email, CONFIG.password);
   console.log("Logged in, cookies:", cookies);
 
   console.log(`Booking class ${CONFIG.classId} on ${CONFIG.day}...`);
